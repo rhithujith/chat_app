@@ -517,6 +517,13 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
       waPhone = waPhone.substring(2);
     }
 
+    // Auto-detect and prepend India country code (91) for standard local 10-digit numbers
+    if (waPhone.length == 10) {
+      waPhone = '91$waPhone';
+    } else if (waPhone.length == 11 && waPhone.startsWith('0')) {
+      waPhone = '91${waPhone.substring(1)}';
+    }
+
     // 2. Draft the invite message with the GitHub link
     final String message = "Hi $phoneName! I'm using ChatCloud, a secure real-time messaging app. Download the app directly from our GitHub repository to start chatting: https://github.com/rhithujith/chat_app";
 
