@@ -389,8 +389,14 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildUsersList(List<QueryDocumentSnapshot> users) {
+  Widget _buildUsersList(
+    List<QueryDocumentSnapshot> users, {
+    bool shrinkWrap = false,
+    ScrollPhysics? physics,
+  }) {
     return ListView.builder(
+      shrinkWrap: shrinkWrap,
+      physics: physics,
       itemCount: users.length,
       itemBuilder: (context, index) {
         final userDoc = users[index];
@@ -435,7 +441,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
     List<QueryDocumentSnapshot> fallbackUsers,
   ) {
     if (matched.isEmpty) {
-      return Center(
+      return SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(40),
           child: Column(
@@ -455,8 +461,10 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 25),
-              Expanded(
-                child: _buildUsersList(fallbackUsers),
+              _buildUsersList(
+                fallbackUsers,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
               ),
             ],
           ),
