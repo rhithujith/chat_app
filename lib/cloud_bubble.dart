@@ -58,11 +58,6 @@ class CloudPainter extends CustomPainter {
     // Bump radius — controls how big each bump is
     final br = w * 0.13;
 
-    // We draw the cloud by placing circles (ovals) around the edge
-    // and then filling the center — using a single path of arcs
-
-    final path = Path();
-
     // Each bump is a small circle drawn as an arc
     // We go clockwise around the cloud: top → right → bottom → left
 

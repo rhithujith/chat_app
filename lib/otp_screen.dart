@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'contacts_screen.dart';
 
 class OtpScreen extends StatefulWidget {
@@ -37,21 +38,35 @@ class _OtpScreenState extends State<OtpScreen> {
         smsCode: _otpController.text.trim(),
       );
 
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      final user = userCredential.user;
+
+      if (user != null) {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'uid': user.uid,
+          'phone': user.phoneNumber ?? widget.phoneNumber,
+          'name': 'User ${widget.phoneNumber}',
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
 
       // Navigate to contacts and clear the stack
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const ContactsScreen(),
-        ),
-            (route) => false,
-      );
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const ContactsScreen(),
+          ),
+              (route) => false,
+        );
+      }
     } catch (e) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid OTP. Please try again.')),
-      );
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid OTP. Please try again.')),
+        );
+      }
     }
   }
 
