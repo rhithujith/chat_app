@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'chat_screen.dart';
 import 'login_screen.dart';
 
@@ -509,6 +510,34 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
     );
   }
 
+  Future<void> _inviteViaWhatsApp(String phoneName, String rawPhone) async {
+    // 1. Clean the phone number for WhatsApp wa.me API (digits only)
+    String waPhone = rawPhone.replaceAll(RegExp(r'\D'), '');
+    if (waPhone.startsWith('00')) {
+      waPhone = waPhone.substring(2);
+    }
+
+    // 2. Draft the invite message with the GitHub link
+    final String message = "Hi $phoneName! I'm using ChatCloud, a secure real-time messaging app. Download the app directly from our GitHub repository to start chatting: https://github.com/rhithujith/chat_app";
+
+    // 3. Construct wa.me URL
+    final Uri url = Uri.parse("https://wa.me/$waPhone?text=${Uri.encodeComponent(message)}");
+
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        throw 'Could not launch WhatsApp API URL';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to open WhatsApp: $e')),
+        );
+      }
+    }
+  }
+
   Widget _buildPhoneBookTab(List<Contact> unmatched) {
     if (unmatched.isEmpty) {
       return const Center(
@@ -533,11 +562,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
           title: Text(contact.displayName, style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.black87)),
           subtitle: Text(phoneNum, style: const TextStyle(color: Colors.grey)),
           trailing: TextButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Invitation link simulated for ${contact.displayName}!')),
-              );
-            },
+            onPressed: () => _inviteViaWhatsApp(contact.displayName, phoneNum),
             child: const Text('Invite', style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
           ),
         );
