@@ -18,6 +18,8 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
   bool _isLoadingContacts = false;
   List<Contact> _phoneContacts = [];
   TabController? _tabController;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -30,6 +32,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
 
   @override
   void dispose() {
+    _searchController.dispose();
     _tabController?.dispose();
     super.dispose();
   }
@@ -163,81 +166,153 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
               )
             : null,
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
-          }
-
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
-          final dbUsers = snapshot.data?.docs ?? [];
-          final activeUsers = dbUsers.where((doc) => doc.id != currentUid).toList();
-
-          // --- WEB OR NO NATIVE PERMISSION FLOW ---
-          if (kIsWeb || !_permissionGranted) {
-            return _buildSimpleList(activeUsers);
-          }
-
-          // --- MOBILE MATCHING FLOW ---
-          if (_isLoadingContacts) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: Colors.deepPurple),
-                  SizedBox(height: 15),
-                  Text('Syncing phone contacts...', style: TextStyle(color: Colors.grey)),
-                ],
+      body: Column(
+        children: [
+          // Premium Contact & Chat Search Bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value.toLowerCase().trim();
+                });
+              },
+              decoration: InputDecoration(
+                hintText: 'Search contacts by name or phone...',
+                prefixIcon: const Icon(Icons.search, color: Colors.deepPurple),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.grey),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchQuery = '';
+                          });
+                        },
+                      )
+                    : null,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: const BorderSide(color: Colors.deepPurple, width: 1.5),
+                ),
               ),
-            );
-          }
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('users').snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+                }
 
-          // Extract all registered phone numbers and match them to Firestore documents
-          final Set<String> registeredPhones = {};
-          final Map<String, QueryDocumentSnapshot> phoneToUserMap = {};
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
 
-          for (final userDoc in activeUsers) {
-            final data = userDoc.data() as Map<String, dynamic>;
-            final String phone = data['phone'] ?? '';
-            final String cleaned = _cleanPhoneNumber(phone);
-            if (cleaned.isNotEmpty) {
-              registeredPhones.add(cleaned);
-              phoneToUserMap[cleaned] = userDoc;
-            }
-          }
+                final dbUsers = snapshot.data?.docs ?? [];
+                var activeUsers = dbUsers.where((doc) => doc.id != currentUid).toList();
 
-          final List<Contact> matchedContacts = [];
-          final List<Contact> unmatchedContacts = [];
+                // Apply search filter if query is not empty
+                if (_searchQuery.isNotEmpty) {
+                  activeUsers = activeUsers.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final String name = (data['name'] ?? '').toString().toLowerCase();
+                    final String phone = (data['phone'] ?? '').toString();
+                    return name.contains(_searchQuery) || phone.contains(_searchQuery);
+                  }).toList();
+                }
 
-          for (final contact in _phoneContacts) {
-            bool isMatched = false;
-            for (final phoneObj in contact.phones) {
-              final String cleanedLocal = _cleanPhoneNumber(phoneObj.number);
-              if (registeredPhones.contains(cleanedLocal)) {
-                matchedContacts.add(contact);
-                isMatched = true;
-                break;
-              }
-            }
-            if (!isMatched && contact.phones.isNotEmpty) {
-              unmatchedContacts.add(contact);
-            }
-          }
+                // --- WEB OR NO NATIVE PERMISSION FLOW ---
+                if (kIsWeb || !_permissionGranted) {
+                  return _buildSimpleList(activeUsers);
+                }
 
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              // Tab 1: Friends on ChatCloud (Firestore matched)
-              _buildMatchedTab(matchedContacts, phoneToUserMap, activeUsers),
-              // Tab 2: Native Phone Book (Unmatched - Invitation Style)
-              _buildPhoneBookTab(unmatchedContacts),
-            ],
-          );
-        },
+                // --- MOBILE MATCHING FLOW ---
+                if (_isLoadingContacts) {
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: Colors.deepPurple),
+                        SizedBox(height: 15),
+                        Text('Syncing phone contacts...', style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  );
+                }
+
+                // Extract all registered phone numbers and match them to Firestore documents
+                final Set<String> registeredPhones = {};
+                final Map<String, QueryDocumentSnapshot> phoneToUserMap = {};
+
+                for (final userDoc in dbUsers.where((doc) => doc.id != currentUid).toList()) {
+                  final data = userDoc.data() as Map<String, dynamic>;
+                  final String phone = data['phone'] ?? '';
+                  final String cleaned = _cleanPhoneNumber(phone);
+                  if (cleaned.isNotEmpty) {
+                    registeredPhones.add(cleaned);
+                    phoneToUserMap[cleaned] = userDoc;
+                  }
+                }
+
+                final List<Contact> matchedContacts = [];
+                final List<Contact> unmatchedContacts = [];
+
+                for (final contact in _phoneContacts) {
+                  bool isMatched = false;
+                  for (final phoneObj in contact.phones) {
+                    final String cleanedLocal = _cleanPhoneNumber(phoneObj.number);
+                    if (registeredPhones.contains(cleanedLocal)) {
+                      matchedContacts.add(contact);
+                      isMatched = true;
+                      break;
+                    }
+                  }
+                  if (!isMatched && contact.phones.isNotEmpty) {
+                    unmatchedContacts.add(contact);
+                  }
+                }
+
+                // Apply search filter to matched and unmatched contacts on mobile
+                var displayMatched = matchedContacts;
+                var displayUnmatched = unmatchedContacts;
+
+                if (_searchQuery.isNotEmpty) {
+                  displayMatched = displayMatched.where((contact) {
+                    final name = contact.displayName.toLowerCase();
+                    final phones = contact.phones.map((p) => p.number).join(' ');
+                    return name.contains(_searchQuery) || phones.contains(_searchQuery);
+                  }).toList();
+
+                  displayUnmatched = displayUnmatched.where((contact) {
+                    final name = contact.displayName.toLowerCase();
+                    final phones = contact.phones.map((p) => p.number).join(' ');
+                    return name.contains(_searchQuery) || phones.contains(_searchQuery);
+                  }).toList();
+                }
+
+                return TabBarView(
+                  controller: _tabController,
+                  children: [
+                    // Tab 1: Friends on ChatCloud (Firestore matched)
+                    _buildMatchedTab(displayMatched, phoneToUserMap, activeUsers),
+                    // Tab 2: Native Phone Book (Unmatched - Invitation Style)
+                    _buildPhoneBookTab(displayUnmatched),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
