@@ -38,16 +38,22 @@ class _OtpScreenState extends State<OtpScreen> {
         smsCode: _otpController.text.trim(),
       );
 
-      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithCredential(credential)
+          .timeout(const Duration(seconds: 15));
       final user = userCredential.user;
 
       if (user != null) {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-          'uid': user.uid,
-          'phone': user.phoneNumber ?? widget.phoneNumber,
-          'name': 'User ${widget.phoneNumber}',
-          'createdAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .set({
+              'uid': user.uid,
+              'phone': user.phoneNumber ?? widget.phoneNumber,
+              'name': 'User ${widget.phoneNumber}',
+              'createdAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true))
+            .timeout(const Duration(seconds: 10));
       }
 
       // Navigate to contacts and clear the stack
@@ -64,7 +70,7 @@ class _OtpScreenState extends State<OtpScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid OTP. Please try again.')),
+          SnackBar(content: Text('Error: $e')),
         );
       }
     }
