@@ -44,7 +44,9 @@ class _OtpScreenState extends State<OtpScreen> {
       final user = userCredential.user;
 
       if (user != null) {
-        await FirebaseFirestore.instance
+        // Trigger Firestore write in background (non-blocking) so database latency
+        // does not prevent the user from logging in successfully!
+        FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
             .set({
@@ -53,10 +55,12 @@ class _OtpScreenState extends State<OtpScreen> {
               'name': 'User ${widget.phoneNumber}',
               'createdAt': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true))
-            .timeout(const Duration(seconds: 10));
+            .catchError((error) {
+              debugPrint('Firestore background profile write failed: $error');
+            });
       }
 
-      // Navigate to contacts and clear the stack
+      // Navigate to contacts immediately!
       if (mounted) {
         Navigator.pushAndRemoveUntil(
           context,
