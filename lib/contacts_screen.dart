@@ -21,6 +21,8 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
   TabController? _tabController;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _profileChecked = false;
+  bool _profileExists = true;
 
   @override
   void initState() {
@@ -28,6 +30,37 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
     _tabController = TabController(length: 2, vsync: this);
     if (!kIsWeb) {
       _checkContactsPermission();
+    }
+    _checkUserProfile();
+  }
+
+  Future<void> _checkUserProfile() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        setState(() {
+          _profileExists = false;
+          _profileChecked = true;
+        });
+      }
+      return;
+    }
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (mounted) {
+        setState(() {
+          _profileExists = doc.exists;
+          _profileChecked = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error checking user profile: $e');
+      if (mounted) {
+        setState(() {
+          _profileExists = false;
+          _profileChecked = true;
+        });
+      }
     }
   }
 
@@ -169,6 +202,55 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
       ),
       body: Column(
         children: [
+          if (!_profileExists && _profileChecked)
+            Container(
+              color: Colors.red.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              width: double.infinity,
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Your profile is not registered in the database. Friends cannot find or message you.',
+                      style: TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user != null) {
+                        final messenger = ScaffoldMessenger.of(context);
+                        try {
+                          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                            'uid': user.uid,
+                            'phone': user.phoneNumber ?? 'Unknown',
+                            'name': 'User ${user.phoneNumber ?? 'Unknown'}',
+                            'createdAt': FieldValue.serverTimestamp(),
+                          }, SetOptions(merge: true));
+                          _checkUserProfile();
+                          if (!context.mounted) return;
+                          messenger.showSnackBar(
+                            const SnackBar(content: Text('Successfully registered your profile!')),
+                          );
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          messenger.showSnackBar(
+                            SnackBar(content: Text('Failed to register: $e')),
+                          );
+                        }
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Please sign out and sign in using a phone number to register.')),
+                        );
+                      }
+                    },
+                    child: const Text('Register', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                  )
+                ],
+              ),
+            ),
           // Premium Contact & Chat Search Bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

@@ -44,9 +44,8 @@ class _OtpScreenState extends State<OtpScreen> {
       final user = userCredential.user;
 
       if (user != null) {
-        // Trigger Firestore write in background (non-blocking) so database latency
-        // does not prevent the user from logging in successfully!
-        FirebaseFirestore.instance
+        // Await the write to ensure Firestore is correctly configured and working
+        await FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
             .set({
@@ -55,9 +54,7 @@ class _OtpScreenState extends State<OtpScreen> {
               'name': 'User ${widget.phoneNumber}',
               'createdAt': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true))
-            .catchError((error) {
-              debugPrint('Firestore background profile write failed: $error');
-            });
+            .timeout(const Duration(seconds: 10));
       }
 
       // Navigate to contacts immediately!
@@ -73,8 +70,17 @@ class _OtpScreenState extends State<OtpScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
+        String errorMsg = e.toString();
+        if (errorMsg.contains('Permission denied') || errorMsg.contains('permission-denied')) {
+          errorMsg = 'Firestore Permission Denied. Please ensure your Firestore Database is created in Test Mode in Firebase Console.';
+        } else if (errorMsg.contains('not found') || errorMsg.contains('database')) {
+          errorMsg = 'Firestore Database not found. Please ensure Firestore is enabled in your Firebase Console.';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            content: Text(errorMsg),
+            duration: const Duration(seconds: 6),
+          ),
         );
       }
     }
