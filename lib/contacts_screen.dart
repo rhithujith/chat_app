@@ -114,13 +114,13 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
   }
 
   String _cleanPhoneNumber(String phone) {
-    String cleaned = phone.replaceAll(RegExp(r'[^\d+]'), '');
-    if (cleaned.startsWith('+91')) {
-      cleaned = cleaned.substring(3);
-    } else if (cleaned.startsWith('91') && cleaned.length > 10) {
-      cleaned = cleaned.substring(2);
+    // Keep only numeric digits
+    String digits = phone.replaceAll(RegExp(r'\D'), '');
+    // Take the last 10 digits (Standard Indian mobile number length) to resolve prefix variations
+    if (digits.length >= 10) {
+      return digits.substring(digits.length - 10);
     }
-    return cleaned.trim();
+    return digits;
   }
 
   @override
