@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'cloud_bubble.dart';
+import 'notification_service.dart';
 
 enum PickerAction { gallery, camera, simulateGallery }
 
@@ -74,6 +75,13 @@ class _ChatScreenState extends State<ChatScreen> {
         'lastActivity': FieldValue.serverTimestamp(),
         'users': [currentUid, widget.contactUid],
       }, SetOptions(merge: true));
+
+      if (simulateReply) {
+        await NotificationService.instance.showLocalNotification(
+          title: widget.contactName,
+          body: text,
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -170,6 +178,13 @@ class _ChatScreenState extends State<ChatScreen> {
         'lastActivity': FieldValue.serverTimestamp(),
         'users': [currentUid, widget.contactUid],
       }, SetOptions(merge: true));
+
+      if (simulateReply) {
+        await NotificationService.instance.showLocalNotification(
+          title: widget.contactName,
+          body: '📷 Sent an image',
+        );
+      }
 
     } catch (e) {
       if (mounted) {

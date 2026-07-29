@@ -6,6 +6,7 @@ import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'chat_screen.dart';
 import 'login_screen.dart';
+import 'notification_service.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -48,6 +49,8 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
     try {
       final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (doc.exists) {
+        // Save/update device FCM token
+        NotificationService.instance.saveDeviceToken();
         if (mounted) {
           setState(() {
             _profileExists = true;
@@ -64,6 +67,9 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
           'name': defaultName,
           'createdAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
+
+        // Save/update device FCM token
+        NotificationService.instance.saveDeviceToken();
 
         if (mounted) {
           setState(() {
