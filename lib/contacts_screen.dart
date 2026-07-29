@@ -47,11 +47,30 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
     }
     try {
       final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      if (mounted) {
-        setState(() {
-          _profileExists = doc.exists;
-          _profileChecked = true;
-        });
+      if (doc.exists) {
+        if (mounted) {
+          setState(() {
+            _profileExists = true;
+            _profileChecked = true;
+          });
+        }
+      } else {
+        // Auto-register profile in Firestore for authenticated user
+        final phone = user.phoneNumber ?? '';
+        final defaultName = phone.isNotEmpty ? 'User $phone' : 'User ${user.uid.substring(0, 6)}';
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'uid': user.uid,
+          'phone': phone,
+          'name': defaultName,
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        if (mounted) {
+          setState(() {
+            _profileExists = true;
+            _profileChecked = true;
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error checking user profile: $e');
@@ -62,6 +81,129 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
         });
       }
     }
+  }
+
+  Future<void> _showRegistrationDialog() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController(text: user?.phoneNumber ?? '');
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        bool isSubmitting = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Row(
+                children: [
+                  Icon(Icons.person_add_alt_1, color: Colors.deepPurple),
+                  SizedBox(width: 10),
+                  Text('Register Profile', style: TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Register your details so friends can find and message you on Nudge.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 15),
+                  TextField(
+                    controller: nameController,
+                    decoration: InputDecoration(
+                      labelText: 'Full Name',
+                      hintText: 'e.g. Alex Smith',
+                      prefixIcon: const Icon(Icons.person, color: Colors.deepPurple),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: 'Phone Number',
+                      hintText: 'e.g. +919876543210',
+                      prefixIcon: const Icon(Icons.phone, color: Colors.deepPurple),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                if (user == null)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (context) => const LoginScreen()),
+                        (route) => false,
+                      );
+                    },
+                    child: const Text('Go to Login', style: TextStyle(color: Colors.grey)),
+                  ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final name = nameController.text.trim();
+                          final phone = phoneController.text.trim();
+                          if (name.isEmpty || phone.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please enter both name and phone number.')),
+                            );
+                            return;
+                          }
+
+                          setDialogState(() => isSubmitting = true);
+                          try {
+                            final targetUid = user?.uid ?? 'dev_${phone.replaceAll(RegExp(r'\D'), '')}';
+                            await FirebaseFirestore.instance.collection('users').doc(targetUid).set({
+                              'uid': targetUid,
+                              'phone': phone,
+                              'name': name,
+                              'createdAt': FieldValue.serverTimestamp(),
+                            }, SetOptions(merge: true));
+
+                            if (mounted) {
+                              setState(() {
+                                _profileExists = true;
+                                _profileChecked = true;
+                              });
+                            }
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Profile successfully registered!')),
+                              );
+                            }
+                          } catch (e) {
+                            setDialogState(() => isSubmitting = false);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Registration failed: $e')),
+                              );
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Register', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -165,7 +307,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          'ChatCloud',
+          'Nudge',
           style: TextStyle(
             color: Colors.deepPurple,
             fontWeight: FontWeight.bold,
@@ -194,7 +336,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
                 unselectedLabelColor: Colors.grey,
                 indicatorColor: Colors.deepPurple,
                 tabs: const [
-                  Tab(icon: Icon(Icons.mark_chat_read), text: 'ChatCloud Friends'),
+                  Tab(icon: Icon(Icons.mark_chat_read), text: 'Nudge Friends'),
                   Tab(icon: Icon(Icons.contact_phone_outlined), text: 'Phone Contacts'),
                 ],
               )
@@ -218,34 +360,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
                     ),
                   ),
                   TextButton(
-                    onPressed: () async {
-                      final user = FirebaseAuth.instance.currentUser;
-                      if (user != null) {
-                        final messenger = ScaffoldMessenger.of(context);
-                        try {
-                          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-                            'uid': user.uid,
-                            'phone': user.phoneNumber ?? 'Unknown',
-                            'name': 'User ${user.phoneNumber ?? 'Unknown'}',
-                            'createdAt': FieldValue.serverTimestamp(),
-                          }, SetOptions(merge: true));
-                          _checkUserProfile();
-                          if (!context.mounted) return;
-                          messenger.showSnackBar(
-                            const SnackBar(content: Text('Successfully registered your profile!')),
-                          );
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          messenger.showSnackBar(
-                            SnackBar(content: Text('Failed to register: $e')),
-                          );
-                        }
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please sign out and sign in using a phone number to register.')),
-                        );
-                      }
-                    },
+                    onPressed: _showRegistrationDialog,
                     child: const Text('Register', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
                   )
                 ],
@@ -386,7 +501,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
                 return TabBarView(
                   controller: _tabController,
                   children: [
-                    // Tab 1: Friends on ChatCloud (Firestore matched)
+                    // Tab 1: Friends on Nudge (Firestore matched)
                     _buildMatchedTab(displayMatched, phoneToUserMap, activeUsers),
                     // Tab 2: Native Phone Book (Unmatched - Invitation Style)
                     _buildPhoneBookTab(displayUnmatched),
@@ -427,7 +542,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'ChatCloud can check your device phone book to instantly find your friends who are already using the app.',
+                    'Nudge can check your device phone book to instantly find your friends who are already using the app.',
                     style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                   const SizedBox(height: 15),
@@ -533,7 +648,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
               const Icon(Icons.person_search_rounded, size: 70, color: Colors.grey),
               const SizedBox(height: 15),
               const Text(
-                'None of your phone contacts are on ChatCloud yet!',
+                'None of your phone contacts are on Nudge yet!',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
@@ -574,7 +689,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
             ),
           ),
           title: Text(contact.displayName, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text('On ChatCloud • $phoneNum'),
+          subtitle: Text('On Nudge • $phoneNum'),
           onTap: () {
             Navigator.push(
               context,
@@ -607,7 +722,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
     }
 
     // 2. Draft the invite message with the GitHub link
-    final String message = "Hi $phoneName! I'm using ChatCloud, a secure real-time messaging app. Download the app directly from our GitHub repository to start chatting: https://github.com/rhithujith/chat_app";
+    final String message = "Hi $phoneName! I'm using Nudge, a secure real-time messaging app. Download the app directly from our GitHub repository to start chatting: https://github.com/rhithujith/chat_app";
 
     // 3. Construct wa.me URL
     final Uri url = Uri.parse("https://wa.me/$waPhone?text=${Uri.encodeComponent(message)}");
@@ -630,7 +745,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
   Widget _buildPhoneBookTab(List<Contact> unmatched) {
     if (unmatched.isEmpty) {
       return const Center(
-        child: Text('All your phone book contacts are already using ChatCloud!', style: TextStyle(color: Colors.grey)),
+        child: Text('All your phone book contacts are already using Nudge!', style: TextStyle(color: Colors.grey)),
       );
     }
 

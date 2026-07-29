@@ -114,8 +114,14 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const SizedBox(height: 60),
+                Image.asset(
+                  'assets/images/logo_clean.png',
+                  height: 100,
+                  width: 100,
+                ),
+                const SizedBox(height: 20),
                 const Text(
-                  'ChatCloud',
+                  'Nudge',
                   style: TextStyle(
                     fontSize: 36,
                     fontWeight: FontWeight.bold,

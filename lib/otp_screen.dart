@@ -44,14 +44,15 @@ class _OtpScreenState extends State<OtpScreen> {
       final user = userCredential.user;
 
       if (user != null) {
+        final phoneNum = user.phoneNumber ?? (widget.phoneNumber.startsWith('+') ? widget.phoneNumber : '+91${widget.phoneNumber}');
         // Await the write to ensure Firestore is correctly configured and working
         await FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
             .set({
               'uid': user.uid,
-              'phone': user.phoneNumber ?? widget.phoneNumber,
-              'name': 'User ${widget.phoneNumber}',
+              'phone': phoneNum,
+              'name': 'User $phoneNum',
               'createdAt': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true))
             .timeout(const Duration(seconds: 10));
